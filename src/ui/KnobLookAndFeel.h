@@ -7,9 +7,9 @@ class KnobLookAndFeel : public juce::LookAndFeel_V4
 public:
     KnobLookAndFeel()
     {
-        setColour(juce::Slider::thumbColourId,       juce::Colours::transparentBlack);
-        setColour(juce::Slider::rotarySliderFillId,  juce::Colour(0xFFE8A020));
-        setColour(juce::Slider::rotarySliderOutlineId, juce::Colour(0xFF1A1A1A));
+        setColour(juce::Slider::thumbColourId,             juce::Colours::transparentBlack);
+        setColour(juce::Slider::rotarySliderFillColourId,  juce::Colour(0xFFE8A020));
+        setColour(juce::Slider::rotarySliderOutlineColourId, juce::Colour(0xFF1A1A1A));
     }
 
     void drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height,
