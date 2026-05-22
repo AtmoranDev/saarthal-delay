@@ -1,0 +1,99 @@
+name: CI / Release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact-suffix: linux
+          - os: windows-latest
+            artifact-suffix: windows
+          - os: macos-latest
+            artifact-suffix: macos
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2-dev libx11-dev libxcomposite-dev libxcursor-dev \
+            libxext-dev libxinerama-dev libxrandr-dev libxrender-dev \
+            libfreetype6-dev libfontconfig1-dev libglu1-mesa-dev \
+            mesa-common-dev
+
+      - name: Cache JUCE download
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: juce-8.0.4-${{ runner.os }}
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Package (Linux / macOS)
+        if: matrix.os != 'windows-latest'
+        run: |
+          ARTS="build/SaarthalDelay_artefacts/Release"
+          mkdir -p staging/VST3 staging/Standalone
+          cp -r "$ARTS/VST3/"*  staging/VST3/  2>/dev/null || true
+          cp -r "$ARTS/Standalone/"* staging/Standalone/ 2>/dev/null || true
+          cd staging && zip -r "../SaarthalDelay-${{ matrix.artifact-suffix }}.zip" .
+
+      - name: Package (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $arts = "build\SaarthalDelay_artefacts\Release"
+          New-Item -ItemType Directory -Force staging\VST3, staging\Standalone | Out-Null
+          if (Test-Path "$arts\VST3")       { Copy-Item -Recurse "$arts\VST3\*"       staging\VST3\ }
+          if (Test-Path "$arts\Standalone") { Copy-Item -Recurse "$arts\Standalone\*" staging\Standalone\ }
+          Compress-Archive -Path staging\* -DestinationPath "SaarthalDelay-windows.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SaarthalDelay-${{ matrix.artifact-suffix }}
+          path: SaarthalDelay-${{ matrix.artifact-suffix }}.zip
+          if-no-files-found: error
+
+  release:
+    name: Create Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            SaarthalDelay-linux.zip
+            SaarthalDelay-windows.zip
+            SaarthalDelay-macos.zip
